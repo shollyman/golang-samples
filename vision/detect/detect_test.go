@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/GoogleCloudPlatform/golang-samples/internal/testutil"
 )
@@ -36,14 +37,16 @@ func TestDetect(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		var buf bytes.Buffer
-		err := tt.local(&buf, "../testdata/"+tt.path)
-		if err != nil {
-			t.Fatalf("Local %s(%q): got %v, want nil err", tt.name, tt.path, err)
-		}
-		if got := buf.String(); !strings.Contains(got, tt.wantContain) {
-			t.Errorf("Local %s(%q): got %q, want to contain %q", tt.name, tt.path, got, tt.wantContain)
-		}
+		testutil.Retry(t, 3, time.Second, func(r *testutil.R) {
+			var buf bytes.Buffer
+			err := tt.local(&buf, "../testdata/"+tt.path)
+			if err != nil {
+				r.Errorf("Local %s(%q): got %v, want nil err", tt.name, tt.path, err)
+			}
+			if got := buf.String(); !strings.Contains(got, tt.wantContain) {
+				r.Errorf("Local %s(%q): got %q, want to contain %q", tt.name, tt.path, got, tt.wantContain)
+			}
+		})
 	}
 
 	for _, tt := range tests {
@@ -51,13 +54,15 @@ func TestDetect(t *testing.T) {
 			continue
 		}
 
-		var buf bytes.Buffer
-		err := tt.gcs(&buf, "gs://python-docs-samples-tests/vision/"+tt.path)
-		if err != nil {
-			t.Fatalf("GCS %s(%q): got %v, want nil err", tt.name, tt.path, err)
-		}
-		if got := buf.String(); !strings.Contains(got, tt.wantContain) {
-			t.Errorf("GCS %s(%q): got %q, want to contain %q", tt.name, tt.path, got, tt.wantContain)
-		}
+		testutil.Retry(t, 3, time.Second, func(r *testutil.R) {
+			var buf bytes.Buffer
+			err := tt.gcs(&buf, "gs://python-docs-samples-tests/vision/"+tt.path)
+			if err != nil {
+				r.Errorf("GCS %s(%q): got %v, want nil err", tt.name, tt.path, err)
+			}
+			if got := buf.String(); !strings.Contains(got, tt.wantContain) {
+				r.Errorf("GCS %s(%q): got %q, want to contain %q", tt.name, tt.path, got, tt.wantContain)
+			}
+		})
 	}
 }
