@@ -113,6 +113,15 @@ func createOrderByNameDescLimitQuery(client *firestore.Client) {
 	_ = query
 }
 
+func createRangeWithOrderByAndLimitQuery(client *firestore.Client) {
+	cities := client.Collection("cities")
+	// [START fs_where_order_by_limit_query]
+	query := cities.Where("population", ">", 2500000).OrderBy("population").Limit(2)
+	// [END fs_where_order_by_limit_query]
+
+	_ = query
+}
+
 func createRangeWithOrderByQuery(client *firestore.Client) {
 	cities := client.Collection("cities")
 	// [START fs_range_order_by_query]
