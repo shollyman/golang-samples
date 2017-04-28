@@ -11,7 +11,7 @@ import (
 )
 
 func prepareQuery(ctx context.Context, client *firestore.Client) error {
-	// [START fs_query_create_examples
+	// [START fs_query_create_examples]
 	cities := []struct {
 		id string
 		c  City
