@@ -27,6 +27,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
+	defer client.Close()
 	// [END fs_initialize]
 
 	// [START fs_add_data_1]

@@ -47,6 +47,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot create client: %v", err)
 	}
+	defer client.Close()
+
 	if err := addDocAsMap(ctx, client); err != nil {
 		log.Fatalf("Cannot add document as map: %v", err)
 	}
