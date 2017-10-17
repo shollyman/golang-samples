@@ -18,7 +18,7 @@ import (
 func createDataset(client *bigquery.Client, datasetID string) error {
 	ctx := context.Background()
 	// [START bigquery_create_dataset]
-	if err := client.Dataset(datasetID).Create(ctx); err != nil {
+	if err := client.Dataset(datasetID).Create(ctx, &bigquery.DatasetMetadata{}); err != nil {
 		return err
 	}
 	// [END bigquery_create_dataset]
@@ -66,7 +66,7 @@ func createTable(client *bigquery.Client, datasetID, tableID string) error {
 		return err
 	}
 	table := client.Dataset(datasetID).Table(tableID)
-	if err := table.Create(ctx, schema); err != nil {
+	if err := table.Create(ctx, &bigquery.TableMetadata{Schema: schema}); err != nil {
 		return err
 	}
 	// [END bigquery_create_table]
@@ -113,7 +113,7 @@ func listRows(client *bigquery.Client, datasetID, tableID string) error {
 	// [START bigquery_list_rows]
 	q := client.Query(fmt.Sprintf(`
 		SELECT name, count
-		FROM [%s.%s]
+		FROM %s.%s
 		WHERE count >= 5
 	`, datasetID, tableID))
 	it, err := q.Read(ctx)
@@ -141,7 +141,7 @@ func asyncQuery(client *bigquery.Client, datasetID, tableID string) error {
 	// [START bigquery_async_query]
 	q := client.Query(fmt.Sprintf(`
 		SELECT name, count
-		FROM [%s.%s]
+		FROM %s.%s
 	`, datasetID, tableID))
 	job, err := q.Run(ctx)
 	if err != nil {
