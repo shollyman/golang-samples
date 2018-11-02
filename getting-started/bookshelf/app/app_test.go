@@ -30,6 +30,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+<<<<<<< HEAD
 func TestMainFunc(t *testing.T) {
 	// randomize port selection to reduce liklihood of port collision
 	rand.Seed(time.Now().UnixNano())
@@ -43,6 +44,18 @@ func TestMainFunc(t *testing.T) {
 		appWt.WaitForNet()
 		bodyContains(t, appWt, "/books", "No books found")
 	})
+=======
+// This function verifies compilation occurs without error.
+// It may not be possible to run the application without
+// satisfying appengine environmental dependencies such as
+// the presence of a GCE metadata server.
+func TestBuildable(t *testing.T) {
+	m := testutil.BuildMain(t)
+	defer m.Cleanup()
+	if !m.Built() {
+		t.Fatal("failed to compile application.")
+	}
+>>>>>>> 4545e9ab620cbc3a431229c45a7f960c5246b442
 }
 
 func TestNoBooks(t *testing.T) {
