@@ -34,6 +34,9 @@ func main() {
 
 	// Sets your Google Cloud Platform project ID.
 	projectID := "YOUR_PROJECT_ID"
+	// See https://cloud.google.com/bigquery-transfer/docs/locations
+	// for valid locations.
+	location = "US"
 
 	// Creates a client.
 	client, err := datatransfer.NewClient(ctx)
@@ -43,7 +46,7 @@ func main() {
 	defer client.Close()
 
 	req := &datatransferpb.ListDataSourcesRequest{
-		Parent: fmt.Sprintf("projects/%s", projectID),
+		Parent: fmt.Sprintf("projects/%s/locations/%s", projectID, location),
 	}
 	it := client.ListDataSources(ctx, req)
 	fmt.Println("Supported Data Sources:")
