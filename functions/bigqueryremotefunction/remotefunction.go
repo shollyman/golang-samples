@@ -48,6 +48,7 @@ func init() {
 	//RegisterUDF("TranslateText", translateText)
 }
 
+// RegisterUDF is a utility function to abstract request management from UDF logic.
 func RegisterUDF(name string, f func(context.Context, *UDFRequest) *UDFResponse) {
 	functions.HTTP(name, func(resp http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -72,7 +73,7 @@ func RegisterUDF(name string, f func(context.Context, *UDFRequest) *UDFResponse)
 	})
 }
 
-type RequestRow []interface{}
+type CallData []interface{}
 type Value interface{}
 
 // UDFRequest models the expected request format from BigQuery.
@@ -83,7 +84,7 @@ type UDFRequest struct {
 	Caller             string            `json:"caller"`
 	SessionUser        string            `json:"sessionUser"`
 	UserDefinedContext map[string]string `json:"userDefinedContext"`
-	Calls              []RequestRow      `json:"calls"`
+	Calls              []CallData        `json:"calls"`
 }
 
 // UDFResponse models the expected response format that BigQuery expects from a remote UDF.
@@ -102,6 +103,10 @@ func detectLanguage(ctx context.Context, req *UDFRequest) *UDFResponse {
 
 	resp := &UDFResponse{}
 
+	if len(req.Calls) == 0 {
+		resp.ErrorMessage = "no calls in request"
+		return resp
+	}
 	for k, row := range req.Calls {
 		str, ok := row[0].(string)
 		if !ok {
