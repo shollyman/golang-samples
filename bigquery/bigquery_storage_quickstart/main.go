@@ -419,12 +419,14 @@ func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.Read
 
 // [END bigquerystorage_quickstart]
 
-// DebugStreamLogger is a gRPC client stream interceptor suitable for logging activity related to client gRPC streams.
+// DebugStreamLogger is a gRPC client stream interceptor.
 //
-// To use this with an existing client, pass the appropriate ClientOption to register this interceptor. For example, to instantiate a new client
-// from the cloud.google.com/go/bigquery/storage/apiv1 package:
+// It's designed to provide additional inform specifically for the ReadRows RPC,
+// and effective is a middleware that logs events between the client and service.
 //
-//	client, err := bqstorage.NewClient(ctx, projectID, option.WithGRPCDialOption(grpc.WithStreamInterceptor(DebugReadInterceptor)))
+// You instantiate interceptors via gRPC DialOption(s), so for example:
+//
+// client, err := bqstorage.NewClient(ctx, projectID, option.WithGRPCDialOption(grpc.WithStreamInterceptor(DebugReadInterceptor)))
 func DebugReadInterceptor(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 
 	real, err := streamer(ctx, desc, cc, method, opts...)
