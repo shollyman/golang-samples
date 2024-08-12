@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -428,7 +429,7 @@ func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.Read
 //
 // client, err := bqstorage.NewClient(ctx, projectID, option.WithGRPCDialOption(grpc.WithStreamInterceptor(DebugReadInterceptor)))
 func DebugReadInterceptor(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-
+	log.Printf("intercepting a new Read stream, %d goroutines reported", runtime.NumGoroutine())
 	real, err := streamer(ctx, desc, cc, method, opts...)
 	if err != nil {
 		log.Printf("interception failed: %v", err)
