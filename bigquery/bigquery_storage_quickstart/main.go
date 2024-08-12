@@ -38,16 +38,21 @@ import (
 	"time"
 
 	bqStorage "cloud.google.com/go/bigquery/storage/apiv1"
+	"cloud.google.com/go/bigquery/storage/apiv1/storagepb"
+	bqStoragepb "cloud.google.com/go/bigquery/storage/apiv1/storagepb"
 	"github.com/apache/arrow/go/v10/arrow"
 	"github.com/apache/arrow/go/v10/arrow/ipc"
 	"github.com/apache/arrow/go/v10/arrow/memory"
+	"github.com/google/uuid"
 	gax "github.com/googleapis/gax-go/v2"
 	goavro "github.com/linkedin/goavro/v2"
-	bqStoragepb "google.golang.org/genproto/googleapis/cloud/bigquery/storage/v1"
+	"google.golang.org/api/option"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -75,8 +80,12 @@ var (
 
 func main() {
 	flag.Parse()
+
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+
 	ctx := context.Background()
-	bqReadClient, err := bqStorage.NewBigQueryReadClient(ctx)
+	bqReadClient, err := bqStorage.NewBigQueryReadClient(ctx,
+		option.WithGRPCDialOption(grpc.WithStreamInterceptor(DebugReadInterceptor)))
 	if err != nil {
 		log.Fatalf("NewBigQueryStorageClient: %v", err)
 	}
@@ -393,7 +402,7 @@ func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.Read
 			}
 			undecoded := rows.GetAvroRows().GetSerializedBinaryRows()
 			for len(undecoded) > 0 {
-				datum, remainingBytes, err := codec.NativeFromBinary(undecoded)
+				_, remainingBytes, err := codec.NativeFromBinary(undecoded)
 
 				if err != nil {
 					if err == io.EOF {
@@ -401,7 +410,7 @@ func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.Read
 					}
 					return fmt.Errorf("decoding error with %d bytes remaining: %v", len(undecoded), err)
 				}
-				printDatum(datum)
+				//printDatum(datum)
 				undecoded = remainingBytes
 			}
 		}
@@ -409,3 +418,113 @@ func processAvro(ctx context.Context, schema string, ch <-chan *bqStoragepb.Read
 }
 
 // [END bigquerystorage_quickstart]
+
+// DebugStreamLogger is a gRPC client stream interceptor suitable for logging activity related to client gRPC streams.
+//
+// To use this with an existing client, pass the appropriate ClientOption to register this interceptor. For example, to instantiate a new client
+// from the cloud.google.com/go/bigquery/storage/apiv1 package:
+//
+//	client, err := bqstorage.NewClient(ctx, projectID, option.WithGRPCDialOption(grpc.WithStreamInterceptor(DebugReadInterceptor)))
+func DebugReadInterceptor(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+
+	real, err := streamer(ctx, desc, cc, method, opts...)
+	if err != nil {
+		log.Printf("interception failed: %v", err)
+		return nil, err
+	}
+	readLogger := NewReadRowsLogger(ctx, real, method)
+	return readLogger, nil
+}
+
+const (
+	clientStreamMethodName = "ClientStreamMethod"
+)
+
+// readLogger satisfies the ClientStream interface, and provides
+// more detailed request logging specifically for BigQuery Storage
+// ReadRows RPCs
+type readRowsLogger struct {
+	// retained context for the ClientStream.
+	ctx context.Context
+	// the "real" ClientStream that has been intercepted.
+	real grpc.ClientStream
+	// unique ID for this instance.
+	id string
+}
+
+func NewReadRowsLogger(ctx context.Context, cs grpc.ClientStream, method string) *readRowsLogger {
+	return &readRowsLogger{
+		ctx:  ctx,
+		real: cs,
+		id:   uuid.New().String(),
+	}
+}
+
+// log prepends the log with the ID of this particular interceptor instance.
+func (rrl *readRowsLogger) log(format string, v ...any) {
+	preFormat := fmt.Sprintf("[%s] %s", rrl.id, format)
+	log.Printf(preFormat, v...)
+}
+
+func (rrl *readRowsLogger) Header() (metadata.MD, error) {
+	resp, err := rrl.real.Header()
+	if err != nil {
+		rrl.log("Header intercept errored: %v", err)
+	}
+	rrl.log("Header intercept: %d keys", len(resp))
+	return resp, err
+}
+
+func (rrl *readRowsLogger) Trailer() metadata.MD {
+	resp := rrl.real.Trailer()
+	rrl.log("Trailer intercept: %d keys", len(resp))
+	return resp
+}
+
+func (rrl *readRowsLogger) CloseSend() error {
+	err := rrl.real.CloseSend()
+	if err != nil {
+		rrl.log("CloseSend errored: %v", err)
+	}
+	return err
+}
+
+func (rrl *readRowsLogger) Context() context.Context {
+	ctx := rrl.real.Context()
+	if err := ctx.Err(); err != nil {
+		rrl.log("Context call intercepted, and has error: %v", err)
+	}
+	return ctx
+}
+
+func (rrl *readRowsLogger) SendMsg(m interface{}) error {
+	if req, ok := m.(*storagepb.ReadRowsRequest); ok {
+		rrl.log("SendMsg intercepting ReadRowsRequest, offset %d, stream ID %q", req.GetOffset(), req.GetReadStream())
+	}
+	err := rrl.real.SendMsg(m)
+	if err != nil {
+		rrl.log("SendMsg intercept failed: %v", err)
+	}
+	return err
+}
+
+func (rrl *readRowsLogger) RecvMsg(m interface{}) error {
+	rrl.log("before intercept RecvMsg")
+	before := time.Now()
+	err := rrl.real.RecvMsg(m)
+	if err != nil {
+		rrl.log("[dur %v] RecvMsg intercept error: %v", time.Since(before), err)
+	} else {
+		if respMsg, ok := m.(*storagepb.ReadRowsResponse); ok {
+			rrl.log("[dur %v] RecvMsg intercept, resp size %d", time.Since(before), proto.Size(respMsg))
+			if stats := respMsg.GetStats(); stats != nil {
+				if progress := stats.GetProgress(); progress != nil {
+					rrl.log("RecvMsg intercept (stats) %f before, %f after", progress.GetAtResponseStart(), progress.GetAtResponseEnd())
+				}
+			}
+		} else {
+			rrl.log("RecvMsg intercept, wasn't ReadRowsResponse")
+		}
+	}
+	return err
+}
